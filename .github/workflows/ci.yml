@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Unit tests
+        run: pytest -q
+
+      - name: Smoke-test the harness on synthetic data
+        run: |
+          cd scripts
+          OUT="$(mktemp -d)"
+          python step2_hnsw_benchmark.py --data "$OUT" --out "$OUT" \
+              --n 2000 --dim 64 --n-queries 200 --ef-search 16 32 64
+          python step3_ivf_benchmark.py  --data "$OUT" --out "$OUT" \
+              --n 2000 --dim 64 --n-queries 200 --nlist 20 --nprobe 2 4 8
+          python step4_analysis.py       --data "$OUT" --target-recall 0.95
+          python step5_concurrency.py    --data "$OUT" --out "$OUT" \
+              --n 2000 --dim 64 --n-queries 200 --threads 1 2
+
+      - name: Regenerate figures from committed data
+        run: |
+          cd figures
+          python make_figures.py
