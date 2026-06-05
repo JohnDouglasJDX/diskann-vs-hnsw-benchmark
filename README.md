@@ -1,5 +1,9 @@
 # DiskANN vs HNSW — A Vector Index Benchmark
 
+[![CI](https://github.com/JohnDouglasJDX/diskann-vs-hnsw-benchmark/actions/workflows/ci.yml/badge.svg)](https://github.com/JohnDouglasJDX/diskann-vs-hnsw-benchmark/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+
 Empirical comparison of two approximate-nearest-neighbor (ANN) index families on
 real Chinese academic-paper embeddings, at two scales:
 
@@ -126,6 +130,25 @@ the graph. The graph index's asymptotic advantage only appears at large `N`.
 This is precisely why the production conclusion (3.38M) cannot be extrapolated
 from a toy benchmark — and why both scales are reported here.
 
+### Concurrent throughput: single-query QPS is not the ceiling
+
+The QPS above is *latency-bound* — one query at a time. A serving system cares
+about throughput under concurrency, so `step5_concurrency.py` fixes one operating
+point per index and sweeps the query-thread count (`data/concurrency_10k_results.json`):
+
+| Query threads | 1 | 2 | 4 | 8 |
+|---|--:|--:|--:|--:|
+| HNSW (ef=64) QPS | 3,615 | 7,182 | 12,933 | **20,089** |
+| IVF (nprobe=12) QPS | 7,138 | 10,749 | 12,217 | 16,412 |
+
+HNSW scales **5.56× at 8 threads** (parallel efficiency ≈ 0.69) and overtakes
+IVF beyond two threads: greedy graph walks are embarrassingly parallel across
+queries, while IVF — already near-brute-force at this scale — saturates memory
+bandwidth sooner. *(Laptop/synthetic run; absolute QPS is hardware-specific, the
+**scaling shape** is the point.)*
+
+![Concurrent throughput scaling](figures/concurrency_10k.png)
+
 ### Run it
 
 ```bash
@@ -140,9 +163,13 @@ python step1_prepare_data.py --csv your.csv --text-cols title abstract \
 python step2_hnsw_benchmark.py --data ../data --out ../data
 python step3_ivf_benchmark.py  --data ../data --out ../data
 python step4_analysis.py       --data ../data --target-recall 0.95
+python step5_concurrency.py    --data ../data --out ../data  # multi-thread QPS
 
 cd ../figures && python make_figures.py
 ```
+
+The full 3.38M production pipeline (Milvus + microsoft/DiskANN) is documented,
+command-for-command, in **[docs/production_runbook.md](docs/production_runbook.md)**.
 
 ---
 
@@ -172,10 +199,13 @@ single-query throughput (not batched/concurrent).
 **Two experiments, different engines — read this before comparing across
 sections:**
 
-- The **3.38M** results compare **Milvus-served HNSW** against **Microsoft's
-  Rust DiskANN**, on a Windows desktop (i7-13700F, RTX 4070 SUPER, 32 GB RAM,
-  2 TB NVMe). Search memory for DiskANN is reported as "< 1 GB"; HNSW memory is
-  the Milvus container's resident set.
+- The **3.38M** results compare **HNSW served by Milvus 2.5.10 (standalone)**
+  against **Microsoft's Rust DiskANN** (the `diskann-benchmark` runner's
+  `graph-index-build-pq` path), on a Windows desktop (i7-13700F, RTX 4070 SUPER,
+  32 GB RAM, 2 TB NVMe). The exact build/search invocations are in
+  **[docs/production_runbook.md](docs/production_runbook.md)**. Search memory for
+  DiskANN is reported as "< 1 GB"; HNSW memory is the Milvus container's resident
+  set.
 - The **10K** results compare **`hnswlib`** against **`faiss` IVF** on a laptop.
   **IVF is not DiskANN** — it is a lightweight stand-in for partition-based
   disk indexes, used to keep the reproducible harness dependency-light. Do not
@@ -184,8 +214,9 @@ sections:**
 **Limitations.**
 - DiskANN's α was left at its default; sweeping α (≈1.2 is the usual sweet spot)
   and directly counting search hops are natural next steps.
-- QPS is single-threaded; concurrent throughput (and async-I/O gains à la
-  VeloANN) is not measured here.
+- The headline QPS numbers are single-query (latency-bound). Multi-threaded
+  scaling *is* measured at 10K (§3, `step5_concurrency.py`), but concurrent
+  throughput at 3.38M — and async-I/O gains à la VeloANN — are not.
 - The "< 1 GB" DiskANN memory is a working-set figure, not an exact RSS trace.
 - Only two scales are measured; the curve between them is not characterized.
 
@@ -199,22 +230,33 @@ numbers are presented as measurements.
 ```
 diskann-vs-hnsw-benchmark/
 ├── README.md                         # this report
-├── requirements.txt
+├── requirements.txt  ·  requirements-dev.txt
+├── .github/workflows/ci.yml          # tests + synthetic harness on every push
 ├── data/
 │   ├── benchmark_3.38M_summary.json  # measured production numbers
 │   ├── hnsw_10k_results.json         # full ef sweep
-│   └── ivf_10k_results.json          # full nprobe sweep
+│   ├── ivf_10k_results.json          # full nprobe sweep
+│   └── concurrency_10k_results.json  # thread-scaling sweep
 ├── scripts/
 │   ├── bench_utils.py                # shared recall / latency / RSS / data
 │   ├── step1_prepare_data.py         # embed corpus + ground truth
 │   ├── step2_hnsw_benchmark.py       # HNSW sweep
 │   ├── step3_ivf_benchmark.py        # IVF sweep
-│   └── step4_analysis.py             # Markdown comparison tables
+│   ├── step4_analysis.py             # Markdown comparison tables
+│   ├── step5_concurrency.py          # multi-thread QPS scaling
+│   └── production/                   # the real 3.38M pipeline
+│       ├── milvus_hnsw_3.38M.py      #   Milvus 2.5.10 HNSW
+│       ├── diskann_3.38M.sh          #   microsoft/DiskANN (Rust) build + search
+│       ├── diskann_job.json          #   diskann-benchmark job (R=32 & R=64)
+│       └── npy_to_diskann_bin.py     #   .npy -> DiskANN .bin
+├── tests/
+│   └── test_bench_utils.py           # recall / percentile / ground-truth units
 ├── figures/
-│   ├── make_figures.py               # regenerates the 10K chart from data
+│   ├── make_figures.py               # regenerates the 10K charts from data
 │   └── *.png
 └── docs/
-    └── diskann_technical_analysis.md # α-RNG / BeamSearch / PQ re-ranking
+    ├── diskann_technical_analysis.md # α-RNG / BeamSearch / PQ re-ranking
+    └── production_runbook.md         # command-for-command 3.38M reproduction
 ```
 
 ---
@@ -226,7 +268,7 @@ diskann-vs-hnsw-benchmark/
 - Singh et al., *FreshDiskANN: A Fast and Accurate Graph-Based ANN Index for
   Streaming Similarity Search*, arXiv:2105.09613.
 - *VeloANN: Optimizing SSD-Resident Graph Indexing for High-Throughput Vector
-  Search*, VLDB 2026, arXiv:2602.22805.
+  Search*, PVLDB 2026, arXiv:2602.22805.
 - [microsoft/DiskANN](https://github.com/microsoft/DiskANN) ·
   [nmslib/hnswlib](https://github.com/nmslib/hnswlib) ·
   [facebookresearch/faiss](https://github.com/facebookresearch/faiss) ·

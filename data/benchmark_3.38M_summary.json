@@ -18,7 +18,7 @@
   },
   "results": {
     "HNSW (Milvus)": {
-      "engine": "Milvus v3.0-beta standalone",
+      "engine": "Milvus 2.5.10 standalone",
       "params": {"M": 16, "efConstruction": 200, "ef_search": 32},
       "search_memory_gb": 11.7,
       "index_disk_gb": 7.9,
@@ -28,7 +28,7 @@
       "avg_latency_ms": 19.0
     },
     "DiskANN R=32/L=64": {
-      "engine": "microsoft/DiskANN (Rust, disk-index)",
+      "engine": "microsoft/DiskANN (Rust, diskann-benchmark / graph-index-build-pq)",
       "params": {"R": 32, "L_build": 64},
       "search_memory_gb": 0.85,
       "index_disk_gb": 31.3,
@@ -38,7 +38,7 @@
       "avg_latency_ms": 5.7
     },
     "DiskANN R=64/L=128": {
-      "engine": "microsoft/DiskANN (Rust, disk-index)",
+      "engine": "microsoft/DiskANN (Rust, diskann-benchmark / graph-index-build-pq)",
       "params": {"R": 64, "L_build": 128},
       "search_memory_gb": 0.85,
       "index_disk_gb": 31.3,

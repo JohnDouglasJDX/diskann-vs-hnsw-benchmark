@@ -7,6 +7,14 @@ data/*.bin
 data/*.index
 scripts/hnsw_results.json
 scripts/ivf_results.json
+data/hnsw_results.json
+data/ivf_results.json
+data/concurrency_results.json
+data/base.bin
+data/query.bin
+data/gt.bin
+data/diskann_out.json
+data/diskann_index/
 
 # Python
 __pycache__/

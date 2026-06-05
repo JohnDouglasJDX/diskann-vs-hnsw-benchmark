@@ -67,6 +67,27 @@ def percentile_stats(latencies: Sequence[float]) -> dict[str, float]:
 
 
 # --------------------------------------------------------------------------- #
+# Concurrent throughput
+# --------------------------------------------------------------------------- #
+def batch_qps(search_batch_fn: Callable[[np.ndarray], object],
+              queries: np.ndarray,
+              repeats: int = 3) -> float:
+    """
+    Throughput (queries/sec) of one *batched* search call, where the engine
+    parallelizes the batch internally (hnswlib ``num_threads`` / faiss OpenMP).
+
+    Reports the best of ``repeats`` runs to suppress scheduling noise. This is
+    the concurrent counterpart to the single-query QPS measured elsewhere.
+    """
+    best = float("inf")
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        search_batch_fn(queries)
+        best = min(best, time.perf_counter() - t0)
+    return len(queries) / best
+
+
+# --------------------------------------------------------------------------- #
 # Data loading (real embeddings if present, else a reproducible synthetic set)
 # --------------------------------------------------------------------------- #
 def load_or_synthesize(data_dir: str,

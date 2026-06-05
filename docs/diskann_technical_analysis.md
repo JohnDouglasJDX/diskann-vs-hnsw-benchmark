@@ -12,7 +12,7 @@ experiment.
 2. **FreshDiskANN** — *A Fast and Accurate Graph-Based ANN Index for Streaming
    Similarity Search*, arXiv:2105.09613 (2021).
 3. **VeloANN** — *Optimizing SSD-Resident Graph Indexing for High-Throughput
-   Vector Search*, VLDB 2026, arXiv:2602.22805.
+   Vector Search*, PVLDB 2026, arXiv:2602.22805.
 
 ---
 
