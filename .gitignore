@@ -1,0 +1,19 @@
+# Generated benchmark artifacts (keep the committed *_results.json + summary)
+data/vectors.npy
+data/query_vectors.npy
+data/query_indices.npy
+data/ground_truth.npy
+data/*.bin
+data/*.index
+scripts/hnsw_results.json
+scripts/ivf_results.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

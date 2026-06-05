@@ -1,0 +1,10 @@
+# Core benchmark harness (step2 / step3 / step4 / figures)
+numpy>=1.24
+hnswlib>=0.8.0
+faiss-cpu>=1.7.4
+psutil>=5.9
+matplotlib>=3.7
+
+# Only needed for step1 (embedding your own corpus); skip if you use the
+# synthetic fallback set.
+# sentence-transformers>=2.2
