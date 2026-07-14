@@ -36,6 +36,11 @@ def test_recall_at_k_truncates_to_k():
     assert bu.recall_at_k(results, gt, 4) == 0.5
 
 
+def test_recall_at_k_rejects_mismatched_query_counts():
+    with pytest.raises(ValueError, match="same queries"):
+        bu.recall_at_k([[1, 2]], np.array([[1, 2], [3, 4]]), 2)
+
+
 # --------------------------------------------------------------------------- #
 # percentile_stats
 # --------------------------------------------------------------------------- #
@@ -105,10 +110,12 @@ def test_synthesize_is_deterministic_and_well_shaped(tmp_path):
     assert np.array_equal(g1, g2)
 
 
-def test_synthesized_queries_are_their_own_nearest_neighbour(tmp_path):
-    # queries are sampled from the (normalized) base, so each query's exact
-    # top-1 must be itself -> a sanity check on the whole ground-truth path.
+def test_synthesized_queries_are_disjoint_from_base(tmp_path):
     base, queries, gt = bu.load_or_synthesize(
         str(tmp_path), n=400, dim=16, n_queries=15, top_k=10, seed=1)
-    for i in range(len(queries)):
-        assert np.allclose(base[gt[i][0]], queries[i], atol=1e-5)
+    assert gt.shape == (15, 10)
+    assert not any(
+        np.allclose(base_row, query, atol=1e-7)
+        for query in queries
+        for base_row in base
+    )

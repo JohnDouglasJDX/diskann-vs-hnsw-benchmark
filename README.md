@@ -4,13 +4,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
-Empirical comparison of two approximate-nearest-neighbor (ANN) index families on
-real Chinese academic-paper embeddings, at two scales:
+An ANN benchmarking case study with a historical production-scale experiment on
+Chinese academic-paper embeddings and a corrected, reproducible laptop harness:
 
 - **Production scale — 3,384,857 vectors × 1024-dim** (BGE-large-zh-v1.5):
   **Microsoft DiskANN** (disk-resident graph) vs **HNSW** (in-memory graph,
   served by Milvus).
-- **Laptop scale — 10,006 vectors × 1024-dim**: a fully reproducible mini-harness
+- **Laptop scale — 10,000 vectors × 1024-dim**: a fully reproducible mini-harness
   comparing **HNSW** (`hnswlib`) vs **IVF** (`faiss`, a disk-serializable,
   partition-based index) with complete parameter sweeps.
 
@@ -19,18 +19,18 @@ real Chinese academic-paper embeddings, at two scales:
 > — **OKW (Open Knowledge World)** — aggregates ~3.38M scholarly records from PKP-based
 > platforms (OPS preprints, OJS journal articles, OMP monographs): title +
 > abstract fields across mathematics, physics, computer science, and astronomy.
-> The raw vectors are not redistributed, but every script runs out-of-the-box on
-> a synthetic fallback set and all measured numbers are included as JSON.
+> The raw vectors are not redistributed. The laptop harness runs out-of-the-box
+> on a synthetic fallback set; the 3.38M summary is retained as a historical case
+> study and is not presented as a controlled, independently reproducible result.
 
 ---
 
 ## TL;DR
 
-At **3.38M** vectors, DiskANN is not just the memory-frugal option — it is also
-the **faster** one, overturning the common "HNSW is fast, disk indexes are slow"
-intuition:
+In one **3.38M-vector deployment**, the DiskANN configuration used less measured
+memory and reported higher throughput than HNSW served by Milvus:
 
-| Metric (Recall@10 ≈ 93%) | HNSW (Milvus) | DiskANN (R=32/L=64) | DiskANN advantage |
+| Metric (Recall@10 ≈ 93%) | HNSW (Milvus) | DiskANN (R=32/L=64) | Observed difference |
 |---|--:|--:|:--|
 | **Search memory** | 11.7 GB | **< 1 GB** | **> 12× less RAM** |
 | **QPS** | 52.4 | **173.0** | **3.3× higher** |
@@ -39,15 +39,17 @@ intuition:
 | Index size on disk | **7.9 GB** | 31.3 GB | 4.0× larger (HNSW wins) |
 | Build time | **22.3 min** | 49.0 min | 2.2× slower (HNSW wins) |
 
-DiskANN trades **disk space and build time** for **RAM and query speed**. For a
-memory-bound, read-heavy service that is an excellent trade; for a small or
-frequently-rebuilt index, HNSW's simplicity and fast builds win.
+These are **system-level observations, not an algorithm-only comparison**:
+Milvus container RSS and batched client search were compared with DiskANN runner
+working-set and single-thread measurements. The original query preparation also
+sampled queries from the indexed corpus. Treat the numbers as motivation for a
+controlled rerun, not as a general claim that one algorithm is 3.3× faster.
 
 ![Core comparison](figures/core_comparison_3.38M.png)
 
 ---
 
-## 1. The headline result (3.38M vectors)
+## 1. Historical 3.38M-vector case study
 
 `data/benchmark_3.38M_summary.json` holds the full numbers. Two DiskANN
 operating points were measured by sweeping the max out-degree `R` and build
@@ -59,20 +61,22 @@ search-list `L`:
 | DiskANN R=32 / L=64 | < 1 GB | 31.3 GB | 49.0 min | 0.933 | 173.0 | 5.7 ms |
 | DiskANN R=64 / L=128 | < 1 GB | 31.3 GB | ~210 min | 0.976 | 109.4 | 9.1 ms |
 
-### Recall–QPS: DiskANN dominates the frontier
+### Recall–QPS observed in this deployment
 
-Sweeping HNSW's `ef_search` traces the usual recall/throughput curve; both
-DiskANN points sit **above and to the right** of it — higher QPS at equal or
-better recall.
+Sweeping HNSW's `ef_search` traces the usual recall/throughput curve. The two
+DiskANN points sit above and to the right of that measured curve, but the client
+protocols and memory accounting were not equivalent, so this is not a controlled
+Pareto-frontier comparison.
 
 ![Recall-QPS trade-off](figures/recall_qps_3.38M.png)
 
 ### Memory: the structural difference
 
-HNSW must hold the entire graph + vectors in RAM (11.7 GB). DiskANN keeps only
-~32-byte PQ codes plus a hot-node cache resident (< 1 GB) and pages the graph and
-full-precision vectors from SSD on demand — at the cost of a larger on-disk
-footprint.
+In this Milvus configuration, the loaded HNSW collection used 11.7 GB container
+RSS. The DiskANN runner reported <1 GB for resident PQ codes plus its node cache,
+while graph data and full-precision vectors were read from SSD. These two memory
+figures were captured by different mechanisms and should not be read as exact
+process-to-process accounting.
 
 ![Memory footprint breakdown](figures/memory_breakdown_3.38M.png)
 
@@ -88,14 +92,12 @@ minimizes disk and build cost.)*
 
 ## 2. Why — the mechanism in one paragraph
 
-HNSW's graph implicitly prunes edges with **α = 1**, leaving a large-diameter
-graph that it patches with a multi-layer hierarchy. DiskANN's **Vamana** graph
-prunes with a tunable **α > 1**, directly retaining long-range "jump" edges in a
-single flat graph, so greedy search converges in **2–3× fewer hops**. On SSD,
-fewer hops means fewer random reads — which is where the ~3.3× latency/QPS win
-comes from. Product-quantized codes in RAM plus full-precision re-ranking
-(piggy-backed on the same disk sector) then cut memory ~12× without losing
-recall.
+DiskANN's papers attribute much of Vamana's SSD efficiency to α-RNG pruning,
+long-range edges, fewer search hops, and PQ-guided traversal with full-precision
+re-ranking. Those mechanisms are a plausible explanation for the observation
+above, but this experiment did **not** measure hop counts, SSD reads, or isolate
+engine overhead. The 3.3× difference therefore cannot be causally assigned to
+graph structure from the committed evidence alone.
 
 A full, citation-backed derivation — including the FreshDiskANN (streaming
 updates) and VeloANN (async I/O) follow-ups — is in
@@ -107,45 +109,38 @@ updates) and VeloANN (async I/O) follow-ups — is in
 
 The 3.38M run needed a desktop GPU, Milvus, and a Rust DiskANN build. To make
 the methodology runnable anywhere, `scripts/` contains a clean, parameterized
-harness that benchmarks **HNSW (`hnswlib`)** against **IVF (`faiss`)** — IVF
-standing in for the *class* of partition-based, disk-serializable indexes — with
-full parameter sweeps and identical measurement code.
+harness that benchmarks **HNSW (`hnswlib`)** against **IVF (`faiss`)** with full
+parameter sweeps and identical measurement code. IVF is serialized to disk and
+loaded into RAM for search; it is neither DiskANN nor an SSD-resident index.
 
-Measured at 10,006 vectors (`data/hnsw_10k_results.json`,
-`data/ivf_10k_results.json`):
+The committed smoke-test snapshot uses 10,000 synthetic base vectors, 1,000
+**disjoint** synthetic queries, and seed 42 (`data/hnsw_results.json`,
+`data/ivf_results.json`):
 
-| Operating point (Recall@10 ≈ 0.95) | HNSW | IVF |
+| First measured point with Recall@10 ≥ 0.95 | HNSW | IVF |
 |---|--:|--:|
-| Parameter | ef=32 | nprobe=12 |
-| Recall@10 | 0.9701 | 0.9573 |
-| QPS | 1,522 | 2,487 |
-| P50 / P99 latency | 0.63 / 1.06 ms | 0.33 / 0.73 ms |
+| Parameter | ef=64 | nprobe=4 |
+| Recall@10 | ≈0.99 | ≈1.00 |
+| QPS | machine-specific | machine-specific |
+| Latency | see the committed raw result JSON | see the committed raw result JSON |
 | Index size | 40.5 MB | 39.4 MB |
 
 ![Recall-QPS at 10K](figures/recall_qps_10k.png)
 
-**Note the scale-dependence.** At 10K, IVF *dominates* the recall–QPS frontier:
-with so few clusters to scan, a partition index is nearly brute force and beats
-the graph. The graph index's asymptotic advantage only appears at large `N`.
-This is precisely why the production conclusion (3.38M) cannot be extrapolated
-from a toy benchmark — and why both scales are reported here.
+This clustered synthetic dataset is deliberately a **smoke test**, not evidence
+that IVF or HNSW is generally faster. It verifies that the harness, metric, sweep,
+and artifact pipeline work. Algorithm conclusions should come from a public,
+held-out dataset at meaningful scale (for example SIFT1M or GIST1M).
 
 ### Concurrent throughput: single-query QPS is not the ceiling
 
 The QPS above is *latency-bound* — one query at a time. A serving system cares
 about throughput under concurrency, so `step5_concurrency.py` fixes one operating
-point per index and sweeps the query-thread count (`data/concurrency_10k_results.json`):
+point per index and sweeps the query-thread count (`data/concurrency_results.json`).
+Throughput is the median of three batched runs; see that JSON for the current
+machine-specific values and environment metadata.
 
-| Query threads | 1 | 2 | 4 | 8 |
-|---|--:|--:|--:|--:|
-| HNSW (ef=64) QPS | 3,615 | 7,182 | 12,933 | **20,089** |
-| IVF (nprobe=12) QPS | 7,138 | 10,749 | 12,217 | 16,412 |
-
-HNSW scales **5.56× at 8 threads** (parallel efficiency ≈ 0.69) and overtakes
-IVF beyond two threads: greedy graph walks are embarrassingly parallel across
-queries, while IVF — already near-brute-force at this scale — saturates memory
-bandwidth sooner. *(Laptop/synthetic run; absolute QPS is hardware-specific, the
-**scaling shape** is the point.)*
+No cross-engine conclusion is drawn from this synthetic concurrency run.
 
 ![Concurrent throughput scaling](figures/concurrency_10k.png)
 
@@ -168,8 +163,8 @@ python step5_concurrency.py    --data ../data --out ../data  # multi-thread QPS
 cd ../figures && python make_figures.py
 ```
 
-The full 3.38M production pipeline (Milvus + microsoft/DiskANN) is documented,
-command-for-command, in **[docs/production_runbook.md](docs/production_runbook.md)**.
+The historical 3.38M procedure, corrected commands, and remaining provenance gaps
+are documented in **[docs/production_runbook.md](docs/production_runbook.md)**.
 
 ---
 
@@ -191,10 +186,10 @@ scale.
 
 ## 5. Methodology & honest caveats
 
-**Common setup.** 1024-dim BGE-large-zh-v1.5 embeddings, L2-normalized so inner
-product equals cosine similarity. Ground truth is exact brute-force top-k.
-Metric is Recall@10. Latency is single-query wall-clock; QPS is sequential
-single-query throughput (not batched/concurrent).
+**Corrected harness protocol.** Queries are disjoint from the indexed base.
+Vectors are L2-normalized, ground truth is exact brute-force top-k, and the metric
+is Recall@10. Steps 2/3 measure one query per call; step 5 separately measures
+batched throughput across thread counts and reports the median of three runs.
 
 **Two experiments, different engines — read this before comparing across
 sections:**
@@ -205,23 +200,28 @@ sections:**
   32 GB RAM, 2 TB NVMe). The exact build/search invocations are in
   **[docs/production_runbook.md](docs/production_runbook.md)**. Search memory for
   DiskANN is reported as "< 1 GB"; HNSW memory is the Milvus container's resident
-  set.
+  set. The published summary predates the corrected protocol and lacks committed
+  per-query raw output.
 - The **10K** results compare **`hnswlib`** against **`faiss` IVF** on a laptop.
-  **IVF is not DiskANN** — it is a lightweight stand-in for partition-based
-  disk indexes, used to keep the reproducible harness dependency-light. Do not
-  read the 10K IVF numbers as DiskANN numbers.
+  **IVF is not DiskANN** and searches the reloaded index in RAM. Do not read the
+  10K IVF numbers as DiskANN or disk-I/O numbers.
 
 **Limitations.**
-- DiskANN's α was left at its default; sweeping α (≈1.2 is the usual sweet spot)
-  and directly counting search hops are natural next steps.
-- The headline QPS numbers are single-query (latency-bound). Multi-threaded
-  scaling *is* measured at 10K (§3, `step5_concurrency.py`), but concurrent
-  throughput at 3.38M — and async-I/O gains à la VeloANN — are not.
+- The recorded DiskANN job sets α=1.2; α was not swept. Directly counting search
+  hops and SSD reads is a natural next step.
+- The historical 3.38M Milvus script used one client call containing all queries,
+  whereas the DiskANN job recorded one search thread. The corrected Milvus script
+  now issues one query per call and writes raw latencies, but the private-corpus
+  experiment has not yet been rerun.
 - The "< 1 GB" DiskANN memory is a working-set figure, not an exact RSS trace.
+- Identical 31.3 GB disk-size values were recorded for R=32 and R=64 and should be
+  rechecked against separate index directories.
+- Raw 3.38M engine output, exact DiskANN commit, and PQ configuration were not
+  preserved in this public repository.
 - Only two scales are measured; the curve between them is not characterized.
 
-Anything not directly measured is labeled as such; no projected or illustrative
-numbers are presented as measurements.
+The 3.38M numbers are retained for provenance, with the limitations above, until
+a controlled public-data rerun replaces them.
 
 ---
 
@@ -233,10 +233,10 @@ diskann-vs-hnsw-benchmark/
 ├── requirements.txt  ·  requirements-dev.txt
 ├── .github/workflows/ci.yml          # tests + synthetic harness on every push
 ├── data/
-│   ├── benchmark_3.38M_summary.json  # measured production numbers
-│   ├── hnsw_10k_results.json         # full ef sweep
-│   ├── ivf_10k_results.json          # full nprobe sweep
-│   └── concurrency_10k_results.json  # thread-scaling sweep
+│   ├── benchmark_3.38M_summary.json  # historical, manually transcribed summary
+│   ├── hnsw_results.json             # canonical full ef sweep
+│   ├── ivf_results.json              # canonical full nprobe sweep
+│   └── concurrency_results.json      # canonical thread-scaling sweep
 ├── scripts/
 │   ├── bench_utils.py                # shared recall / latency / RSS / data
 │   ├── step1_prepare_data.py         # embed corpus + ground truth
@@ -244,7 +244,7 @@ diskann-vs-hnsw-benchmark/
 │   ├── step3_ivf_benchmark.py        # IVF sweep
 │   ├── step4_analysis.py             # Markdown comparison tables
 │   ├── step5_concurrency.py          # multi-thread QPS scaling
-│   └── production/                   # the real 3.38M pipeline
+│   └── production/                   # corrected commands for a 3.38M rerun
 │       ├── milvus_hnsw_3.38M.py      #   Milvus 2.5.10 HNSW
 │       ├── diskann_3.38M.sh          #   microsoft/DiskANN (Rust) build + search
 │       ├── diskann_job.json          #   diskann-benchmark job (R=32 & R=64)
@@ -256,7 +256,7 @@ diskann-vs-hnsw-benchmark/
 │   └── *.png
 └── docs/
     ├── diskann_technical_analysis.md # α-RNG / BeamSearch / PQ re-ranking
-    └── production_runbook.md         # command-for-command 3.38M reproduction
+    └── production_runbook.md         # historical procedure + rerun gaps
 ```
 
 ---

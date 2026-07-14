@@ -1,18 +1,24 @@
 # Production Runbook — the 3.38M-vector experiment
 
-The headline numbers in the [main report](../README.md#1-the-headline-result-338m-vectors)
-were produced by this pipeline. Unlike the laptop-scale harness
+The historical numbers in the
+[main report](../README.md#1-historical-338m-vector-case-study) came from an
+earlier form of this pipeline. Unlike the laptop-scale harness
 (`scripts/step2..4`, which runs anywhere on synthetic data), this run needs the
 proprietary OKW corpus, a GPU for embedding, a built DiskANN, and a fast NVMe
 SSD — so it is **not** part of CI. This document records how it was run, so the
-result is auditable even though the inputs aren't redistributable.
+result is partially auditable even though the inputs aren't redistributable.
+The historical raw engine outputs and exact DiskANN revision were not preserved;
+the limitations below are therefore part of the result, not optional footnotes.
 
 **Hardware.** Intel i7-13700F · RTX 4070 SUPER 12 GB · 32 GB RAM · 2 TB NVMe ·
 Windows 11 Pro. **Dates.** 2026-05-14 … 15.
 
 **Common data.** 3,384,857 × 1024-dim BGE-large-zh-v1.5 embeddings, **L2-normalized**
-so inner product == cosine, and `squared_l2` ranking is identical too. Query set =
-1,000 held-out vectors. Ground truth = exact brute-force top-100 on GPU (~79 s).
+so inner product == cosine, and `squared_l2` ranking is identical too. The
+historical query-preparation script sampled 1,000 vectors from the indexed corpus,
+so self-matches were present. Ground truth was exact brute-force top-100 on GPU
+(~79 s). The corrected script now creates disjoint base/query documents, but the
+private-corpus experiment has not yet been rerun with that protocol.
 
 ```
 scripts/step1_prepare_data.py   # embed corpus -> vectors.npy / query_vectors.npy / ground_truth.npy
@@ -30,12 +36,17 @@ Milvus **2.5.10** standalone via Docker (standalone + etcd + minio). Index param
 #    https://milvus.io/docs/v2.5.x/install_standalone-docker.md
 docker compose up -d
 
-# 2. insert, build, sweep ef_search
+# 2. insert, build, sweep ef_search using one query per client call
 python scripts/production/milvus_hnsw_3.38M.py \
     --vectors data/vectors.npy \
     --queries data/query_vectors.npy \
-    --gt      data/ground_truth.npy
+    --gt      data/ground_truth.npy \
+    --output  data/milvus_hnsw_raw.json
 ```
+
+The table below is the **historical** sweep. Its client submitted all queries in
+one Milvus search request; it must not be compared as sequential single-query
+throughput. The corrected script above records per-query raw latencies.
 
 **Memory** was read from the Milvus container's resident set (`docker stats`) —
 11.7 GB at serve time. **Index size on disk** (7.9 GB) and **build time**
@@ -93,7 +104,9 @@ two operating points (and how they map to the report) are:
 > The PQ chunk count — which sets the resident footprint behind the "< 1 GB" —
 > lives in the `graph-index-build-pq` schema printed by step 3; set it for the
 > 1024-dim vectors, then reconcile this job file with that schema for your exact
-> DiskANN commit before running.
+> DiskANN commit before running. Because the original commit and resolved PQ
+> configuration were not preserved, this job file is not sufficient to reproduce
+> the historical numbers exactly.
 
 | Config | Recall@10 | QPS | Avg latency | Search RAM | Index on disk | Build |
 |---|--:|--:|--:|--:|--:|--:|
@@ -111,10 +124,15 @@ two operating points (and how they map to the report) are:
 | Metric | Source |
 |---|---|
 | Recall@10 | both engines scored against the same exact top-100 ground truth |
-| QPS / latency | single-query (sequential) wall-clock, matching the laptop harness |
+| HNSW QPS / latency | historical: one batched client request; corrected script: sequential per-query wall-clock + raw percentiles |
+| DiskANN QPS / latency | runner output with `num_threads=[1]`; raw historical output was not committed |
 | HNSW search memory | Milvus container RSS via `docker stats` |
 | DiskANN search memory | resident PQ table + node cache reported by the runner |
 | Index size on disk | `du` of the Milvus segment files / the DiskANN index dir |
 
-All raw values are committed in
-[`data/benchmark_3.38M_summary.json`](../data/benchmark_3.38M_summary.json).
+The reported values are collected in
+[`data/benchmark_3.38M_summary.json`](../data/benchmark_3.38M_summary.json),
+which is a manually transcribed summary, not raw engine output. A controlled
+rerun should commit the Milvus JSON, DiskANN runner JSON, dependency/image
+digests, CPU/thread settings, SSD model, cache policy, and a script that derives
+the summary tables from those artifacts.

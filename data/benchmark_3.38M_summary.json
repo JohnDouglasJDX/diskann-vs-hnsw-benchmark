@@ -1,4 +1,12 @@
 {
+  "status": "historical_case_study_not_controlled_benchmark",
+  "limitations": [
+    "Historical queries were sampled from the indexed corpus, so self-matches were present.",
+    "Milvus HNSW throughput used one client request containing all queries; DiskANN recorded num_threads=1.",
+    "HNSW memory is container RSS while DiskANN memory is a runner-reported working set.",
+    "Raw engine outputs, the exact DiskANN commit, and resolved PQ configuration were not preserved.",
+    "The identical R=32 and R=64 disk-size values require verification against separate index directories."
+  ],
   "dataset": {
     "name": "OKW (Open Knowledge World) - PKP-sourced scholarly records: OPS preprints, OJS journal articles, OMP monographs",
     "num_vectors": 3384857,
@@ -54,5 +62,5 @@
     "recall_at_10": [0.820, 0.927, 0.955, 0.968, 0.975, 0.980],
     "qps": [65.0, 52.4, 38.0, 28.0, 20.0, 14.0]
   },
-  "provenance": "Measured on the Windows desktop, 2026-05-14..15. Source: weekly_report.md + DiskANN technical analysis report."
+  "provenance": "Manually transcribed summary from a Windows desktop run, 2026-05-14..15. Source: weekly_report.md + DiskANN technical analysis report; raw engine output is not committed."
 }

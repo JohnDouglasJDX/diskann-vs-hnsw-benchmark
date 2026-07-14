@@ -22,7 +22,8 @@ import os
 
 import numpy as np
 
-from bench_utils import batch_qps, load_or_synthesize, recall_at_k
+from bench_utils import (batch_qps, environment_info, load_or_synthesize,
+                         recall_at_k)
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,6 +65,8 @@ def main() -> None:
     os.makedirs(args.out, exist_ok=True)
 
     print("[1/4] Loading data ...")
+    data_source = ("files" if os.path.exists(os.path.join(args.data, "vectors.npy"))
+                   else "synthetic-disjoint-queries")
     base, queries, gt = load_or_synthesize(
         args.data, args.n, args.dim, args.n_queries, 100, args.seed)
     dim = base.shape[1]
@@ -106,9 +109,12 @@ def main() -> None:
 
     print("[4/4] Saving results ...")
     out = {
+        "environment": environment_info(),
         "config": {"num_vectors": len(base), "dim": dim,
                    "hnsw_ef": args.ef, "ivf_nprobe": args.nprobe,
-                   "threads": args.threads},
+                   "threads": args.threads, "num_queries": len(queries),
+                   "data_source": data_source, "seed": args.seed,
+                   "aggregation": "median of 3 batched runs"},
         "recall": {"hnsw": hnsw_recall, "ivf": ivf_recall},
         "hnsw": scaling(hnsw_by_t),
         "ivf": scaling(ivf_by_t),

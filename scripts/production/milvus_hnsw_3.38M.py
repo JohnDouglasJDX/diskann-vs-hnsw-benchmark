@@ -22,6 +22,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import time
 
 import numpy as np
@@ -41,6 +43,9 @@ def parse_args() -> argparse.Namespace:
                    default=[16, 32, 64, 100, 150, 200])
     p.add_argument("--top-k", type=int, default=10)
     p.add_argument("--batch", type=int, default=50000)
+    p.add_argument("--warmup", type=int, default=50)
+    p.add_argument("--output", default="data/milvus_hnsw_raw.json",
+                   help="machine-readable per-ef metrics and raw latencies")
     return p.parse_args()
 
 
@@ -89,14 +94,50 @@ def main() -> None:
     print("[3/4] Loading + sweeping ef_search ...")
     col.load()
     q = queries.tolist()
+    by_ef = {}
     for ef in args.ef_search:
+        params = {"metric_type": "IP", "params": {"ef": ef}}
+        for query in q[:min(args.warmup, len(q))]:
+            col.search([query], "vec", params, limit=args.top_k)
+
+        labels, latencies_ms = [], []
         t0 = time.perf_counter()
-        res = col.search(q, "vec", {"metric_type": "IP", "params": {"ef": ef}},
-                         limit=args.top_k)
-        qps = len(q) / (time.perf_counter() - t0)
-        labels = [[h.id for h in hits] for hits in res]
+        for query in q:
+            query_t0 = time.perf_counter()
+            res = col.search([query], "vec", params, limit=args.top_k)
+            latencies_ms.append((time.perf_counter() - query_t0) * 1000.0)
+            labels.append([hit.id for hit in res[0]])
+        elapsed = time.perf_counter() - t0
+        qps = len(q) / elapsed
         rec = recall_at_k(labels, gt, args.top_k)
-        print(f"  ef={ef:>4}  recall@{args.top_k}={rec:.4f}  qps={qps:8.1f}")
+        percentiles = np.percentile(latencies_ms, [50, 95, 99])
+        row = {
+            "recall_at_k": rec,
+            "qps": qps,
+            "mean_latency_ms": float(np.mean(latencies_ms)),
+            "p50_latency_ms": float(percentiles[0]),
+            "p95_latency_ms": float(percentiles[1]),
+            "p99_latency_ms": float(percentiles[2]),
+            "raw_latency_ms": latencies_ms,
+        }
+        by_ef[str(ef)] = row
+        print(f"  ef={ef:>4}  recall@{args.top_k}={rec:.4f}  "
+              f"qps={qps:8.1f}  p50={percentiles[0]:.2f}ms  "
+              f"p99={percentiles[2]:.2f}ms")
+
+    output = {
+        "engine": "Milvus 2.5.10 standalone",
+        "protocol": "one query per client call, sequential, after warmup",
+        "config": {"M": args.M, "efConstruction": args.ef_construction,
+                   "top_k": args.top_k, "num_vectors": n, "dim": dim,
+                   "num_queries": len(q), "warmup": args.warmup},
+        "by_ef": by_ef,
+    }
+    output_dir = os.path.dirname(os.path.abspath(args.output))
+    os.makedirs(output_dir, exist_ok=True)
+    with open(args.output, "w", encoding="utf-8") as f:
+        json.dump(output, f, indent=2)
+    print(f"  raw search results: {args.output}")
 
     print("[4/4] Read container RSS for search memory:  docker stats <milvus>")
 

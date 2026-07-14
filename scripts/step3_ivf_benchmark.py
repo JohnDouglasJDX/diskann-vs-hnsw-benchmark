@@ -1,11 +1,11 @@
 """
 Step 3 -- FAISS IVF benchmark (cluster-based, disk-serializable index).
 
-A controlled small-scale counterpart to the in-memory HNSW graph: an inverted
-file (coarse k-means buckets) whose vectors live in a disk-resident index file
-and whose recall/QPS is tuned by ``nprobe``. This is NOT DiskANN -- it is a
-lightweight, dependency-light stand-in for the *class* of partition-based,
-disk-friendly indexes, used here to exercise the harness end-to-end on a laptop.
+A controlled small-scale counterpart to the HNSW graph: an inverted file
+(coarse k-means buckets) whose recall/QPS is tuned by ``nprobe``. The index is
+serialized to disk and loaded back into RAM before search. This is NOT DiskANN
+and is not an SSD-resident search benchmark; it exercises the shared harness
+with a structurally different ANN family.
 For real DiskANN production numbers see ../data/benchmark_3.38M_summary.json
 and ../docs/diskann_technical_analysis.md.
 
@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-from bench_utils import (load_or_synthesize, measure_latencies,
+from bench_utils import (environment_info, load_or_synthesize, measure_latencies,
                          percentile_stats, recall_at_k, rss_mb)
 
 
@@ -49,6 +49,8 @@ def main() -> None:
     index_path = os.path.join(args.out, "ivf.index")
 
     print("[1/4] Loading data ...")
+    data_source = ("files" if os.path.exists(os.path.join(args.data, "vectors.npy"))
+                   else "synthetic-disjoint-queries")
     base, queries, gt = load_or_synthesize(
         args.data, args.n, args.dim, args.n_queries, 100, args.seed)
     dim = base.shape[1]
@@ -94,9 +96,12 @@ def main() -> None:
 
     print("[4/4] Saving results ...")
     out = {
-        "algo": "FAISS IVF (disk-resident, DiskANN-class stand-in)",
+        "algo": "FAISS IVF (in-memory search; disk-serializable)",
+        "environment": environment_info(),
         "config": {"nlist": args.nlist, "metric": "inner_product",
-                   "num_vectors": index.ntotal, "dim": dim},
+                   "num_vectors": index.ntotal, "dim": dim,
+                   "num_queries": len(queries), "data_source": data_source,
+                   "seed": args.seed},
         "build": {"time_s": build_time, "index_size_gb": index_size_gb},
         "memory": {"load_rss_delta_mb": load_rss_delta, "search_rss_mb": search_rss},
         "by_param": by_param,

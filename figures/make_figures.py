@@ -1,9 +1,9 @@
 """
-Regenerate the 10K small-scale Recall-QPS figure from the swept result JSONs.
+Regenerate the small-scale Recall-QPS figure from the canonical result JSONs.
 
 The production-scale (3.38M) figures were produced on the Windows benchmark
-machine and are committed as PNGs; this script makes the laptop-scale figure
-reproducible from data/*_10k_results.json.
+machine and are committed as PNGs; this script makes the laptop-scale figures
+reproducible from data/*_results.json.
 
     python make_figures.py
 """
@@ -30,16 +30,16 @@ def curve(path):
 
 
 def recall_qps_figure() -> None:
-    hr, hq = curve(os.path.join(DATA, "hnsw_10k_results.json"))
-    ir, iq = curve(os.path.join(DATA, "ivf_10k_results.json"))
+    hr, hq = curve(os.path.join(DATA, "hnsw_results.json"))
+    ir, iq = curve(os.path.join(DATA, "ivf_results.json"))
 
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(hr, hq, "o-", color=HNSW_C, lw=2, ms=7, label="HNSW (ef sweep)")
     ax.plot(ir, iq, "s-", color=IVF_C, lw=2, ms=7, label="IVF (nprobe sweep)")
     ax.set_xlabel("Recall@10")
     ax.set_ylabel("QPS (single-query)")
-    ax.set_title("Recall–QPS trade-off — 10K vectors, 1024-dim "
-                 "(BGE-large-zh-v1.5)")
+    ax.set_title("Recall–QPS smoke test — 10K synthetic vectors, "
+                 "1024-dim, disjoint queries")
     ax.grid(alpha=0.3)
     ax.legend()
     fig.tight_layout()
@@ -49,7 +49,7 @@ def recall_qps_figure() -> None:
 
 
 def concurrency_figure() -> None:
-    path = os.path.join(DATA, "concurrency_10k_results.json")
+    path = os.path.join(DATA, "concurrency_results.json")
     if not os.path.exists(path):
         print("skip concurrency figure (run step5_concurrency.py first)")
         return
@@ -68,7 +68,8 @@ def concurrency_figure() -> None:
     ax.set_xlabel("query threads")
     ax.set_ylabel("QPS (batched / concurrent)")
     ax.set_xticks(threads)
-    ax.set_title("Concurrent throughput scaling — 10K vectors, 1024-dim")
+    ax.set_title("Concurrent throughput smoke test — 10K synthetic vectors, "
+                 "1024-dim")
     ax.grid(alpha=0.3)
     ax.legend()
     fig.tight_layout()

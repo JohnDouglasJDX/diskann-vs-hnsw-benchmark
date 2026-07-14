@@ -1,9 +1,11 @@
-# Why DiskANN Beats HNSW on SSD — A Technical Analysis
+# DiskANN and HNSW on SSD — Mechanisms and Testable Hypotheses
 
 This note explains *why* the production-scale numbers in the
 [main report](../README.md) come out the way they do. It distills three papers
 and connects each mechanism to a measured result from the 3.38M-vector
-experiment.
+experiment. The papers establish the mechanisms; this repository's historical
+experiment did not measure graph hops or SSD reads and therefore does not prove
+that those mechanisms caused its observed throughput difference.
 
 **Papers**
 
@@ -60,11 +62,11 @@ HNSW papers over its α = 1 diameter problem with a **multi-layer hierarchy**
 same long-range connectivity directly, in a **single flat graph** — which is
 exactly what you want when the graph lives on disk.
 
-**Measured correspondence (3.38M):** raising `R` (max out-degree) from 32 to 64
+**Observed correspondence (3.38M):** raising `R` (max out-degree) from 32 to 64
 moved Recall@10 from 93.3% → 97.6% while QPS fell 173 → 109. Larger `R` buys
 more long-range edges (higher recall) at the cost of more neighbors processed
-per hop — consistent with DiskANN Fig. 2(c), where Vamana's hop count keeps
-falling with degree while HNSW's stagnates.
+per hop. This is consistent with the paper's results, but the experiment did not
+record hop counts, so it is a hypothesis for a rerun rather than a causal result.
 
 ---
 
@@ -128,10 +130,10 @@ cripple compression methods at a billion points are not yet extreme.
 
 ## 5. One-paragraph summary
 
-HNSW compensates for an α = 1 graph's large diameter with a layered hierarchy;
-DiskANN/Vamana instead builds long-range edges directly via α > 1, cutting
-search hops 2–3×. On SSD those saved hops become saved random reads, turning
-into the measured ~3.3× latency/QPS advantage. PQ-in-RAM + graph-on-SSD with
-implicit full-precision re-ranking then drops memory ~12× (11.7 GB → < 1 GB)
-without sacrificing recall. The price is a larger on-disk index (~4×) and a
-longer build.
+HNSW compensates for an α = 1 graph's diameter with a layered hierarchy;
+DiskANN/Vamana instead retains long-range edges via α > 1. DiskANN's published
+experiments report fewer hops, which should reduce random SSD reads. PQ-in-RAM
+plus graph-on-SSD with full-precision re-ranking also explains DiskANN's intended
+memory/recall trade-off. To connect these mechanisms to this repository's
+historical 3.3× observation, a rerun must measure hops, I/O, equivalent client
+protocols, and process-level memory directly.

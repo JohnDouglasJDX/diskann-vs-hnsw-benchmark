@@ -19,9 +19,14 @@ def load(path: str):
     return json.load(open(path)) if os.path.exists(path) else None
 
 
-def closest(by_param: dict, target: float):
+def first_meeting_target(by_param: dict, target: float):
+    """Lowest-recall measured point that satisfies the requested recall floor."""
     valid = {k: v for k, v in by_param.items() if v.get("recall") is not None}
-    key = min(valid, key=lambda k: abs(valid[k]["recall"] - target))
+    meeting = {k: v for k, v in valid.items() if v["recall"] >= target}
+    if meeting:
+        key = min(meeting, key=lambda k: meeting[k]["recall"])
+    else:
+        key = max(valid, key=lambda k: valid[k]["recall"])
     return key, valid[key]
 
 
@@ -48,9 +53,9 @@ def main() -> None:
     print(f"| Search RSS (MB) | {hnsw['memory']['search_rss_mb']:.0f} | "
           f"{ivf['memory']['search_rss_mb']:.0f} |")
 
-    hk, hv = closest(hnsw["by_param"], args.target_recall)
-    ik, iv = closest(ivf["by_param"], args.target_recall)
-    print(f"\n### Operating point nearest Recall@10 ≈ {args.target_recall}\n")
+    hk, hv = first_meeting_target(hnsw["by_param"], args.target_recall)
+    ik, iv = first_meeting_target(ivf["by_param"], args.target_recall)
+    print(f"\n### First measured point meeting Recall@10 ≥ {args.target_recall}\n")
     print("| Metric | HNSW | IVF |")
     print("|---|--:|--:|")
     print(f"| Param | ef={hk} | nprobe={ik} |")

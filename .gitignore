@@ -1,4 +1,4 @@
-# Generated benchmark artifacts (keep the committed *_results.json + summary)
+# Large/generated benchmark artifacts (canonical result JSON is committed)
 data/vectors.npy
 data/query_vectors.npy
 data/query_indices.npy
@@ -7,9 +7,6 @@ data/*.bin
 data/*.index
 scripts/hnsw_results.json
 scripts/ivf_results.json
-data/hnsw_results.json
-data/ivf_results.json
-data/concurrency_results.json
 data/base.bin
 data/query.bin
 data/gt.bin

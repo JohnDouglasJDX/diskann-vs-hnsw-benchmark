@@ -1,0 +1,77 @@
+{
+  "environment": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "processor": "arm",
+    "python": "3.12.13",
+    "packages": {
+      "numpy": "2.5.1",
+      "hnswlib": "0.8.0",
+      "faiss-cpu": "1.14.3",
+      "psutil": "7.2.2"
+    }
+  },
+  "config": {
+    "num_vectors": 10000,
+    "dim": 1024,
+    "hnsw_ef": 64,
+    "ivf_nprobe": 4,
+    "threads": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "num_queries": 1000,
+    "data_source": "synthetic-disjoint-queries",
+    "seed": 42,
+    "aggregation": "median of 3 batched runs"
+  },
+  "recall": {
+    "hnsw": 0.991,
+    "ivf": 0.9998
+  },
+  "hnsw": {
+    "1": {
+      "qps": 3451.6193743776685,
+      "speedup": 1.0,
+      "efficiency": 1.0
+    },
+    "2": {
+      "qps": 6643.361401083864,
+      "speedup": 1.9247085731408813,
+      "efficiency": 0.9623542865704406
+    },
+    "4": {
+      "qps": 12646.621762332426,
+      "speedup": 3.6639676599951376,
+      "efficiency": 0.9159919149987844
+    },
+    "8": {
+      "qps": 19332.388078135475,
+      "speedup": 5.600961746143034,
+      "efficiency": 0.7001202182678793
+    }
+  },
+  "ivf": {
+    "1": {
+      "qps": 19286.619951131262,
+      "speedup": 1.0,
+      "efficiency": 1.0
+    },
+    "2": {
+      "qps": 31270.806819534144,
+      "speedup": 1.6213731021178723,
+      "efficiency": 0.8106865510589362
+    },
+    "4": {
+      "qps": 36400.25767934382,
+      "speedup": 1.887332138631619,
+      "efficiency": 0.47183303465790477
+    },
+    "8": {
+      "qps": 44383.21140938091,
+      "speedup": 2.301243635320226,
+      "efficiency": 0.28765545441502827
+    }
+  }
+}
