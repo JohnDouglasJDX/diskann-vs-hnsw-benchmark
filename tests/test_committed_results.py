@@ -1,5 +1,6 @@
 """Contract tests for the canonical, user-visible benchmark artifacts."""
 import json
+import hashlib
 from pathlib import Path
 
 
@@ -37,3 +38,11 @@ def test_production_summary_is_explicitly_historical():
     result = load("benchmark_3.38M_summary.json")
     assert result["status"] == "historical_case_study_not_controlled_benchmark"
     assert len(result["limitations"]) >= 3
+
+
+def test_figure_manifest_matches_canonical_result_data():
+    manifest = load("../figures/result_data_manifest.json")
+    for name in ("hnsw_results.json", "ivf_results.json",
+                 "concurrency_results.json"):
+        digest = hashlib.sha256((DATA / name).read_bytes()).hexdigest()
+        assert manifest[name] == digest

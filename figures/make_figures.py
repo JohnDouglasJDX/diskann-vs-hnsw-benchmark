@@ -9,6 +9,7 @@ reproducible from data/*_results.json.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 
@@ -18,6 +19,8 @@ import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "data")
+RESULT_FILES = ("hnsw_results.json", "ivf_results.json",
+                "concurrency_results.json")
 
 
 HNSW_C, IVF_C = "#534AB7", "#D9782A"
@@ -78,9 +81,24 @@ def concurrency_figure() -> None:
     print("wrote", out)
 
 
+def write_data_manifest() -> None:
+    """Record deterministic source hashes without comparing platform-specific PNGs."""
+    manifest = {}
+    for name in RESULT_FILES:
+        path = os.path.join(DATA, name)
+        with open(path, "rb") as f:
+            manifest[name] = hashlib.sha256(f.read()).hexdigest()
+    out = os.path.join(HERE, "result_data_manifest.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print("wrote", out)
+
+
 def main() -> None:
     recall_qps_figure()
     concurrency_figure()
+    write_data_manifest()
 
 
 if __name__ == "__main__":

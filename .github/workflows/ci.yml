@@ -47,4 +47,6 @@ jobs:
           cd figures
           python make_figures.py
           cd ..
-          git diff --exit-code -- figures/
+          # PNG metadata/font rendering varies by OS. The manifest is a
+          # deterministic freshness check over every plotted result JSON.
+          git diff --exit-code -- figures/result_data_manifest.json

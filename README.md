@@ -253,6 +253,7 @@ diskann-vs-hnsw-benchmark/
 │   └── test_bench_utils.py           # recall / percentile / ground-truth units
 ├── figures/
 │   ├── make_figures.py               # regenerates the 10K charts from data
+│   ├── result_data_manifest.json      # deterministic plotted-data hashes
 │   └── *.png
 └── docs/
     ├── diskann_technical_analysis.md # α-RNG / BeamSearch / PQ re-ranking
